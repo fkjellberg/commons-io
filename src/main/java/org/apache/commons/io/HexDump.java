@@ -18,6 +18,7 @@ package org.apache.commons.io;
 
 import java.io.IOException;
 import java.io.OutputStream;
+import java.io.OutputStreamWriter;
 import java.nio.charset.Charset;
 
 /**
@@ -35,6 +36,102 @@ public class HexDump {
      * Instances should NOT be constructed in standard programming.
      */
     public HexDump() {
+    }
+
+    /**
+     * Dump an array of bytes to an Appendable. The output is formatted
+     * for human inspection, with a hexadecimal offset followed by the
+     * hexadecimal values of the next 16 bytes of data and the printable ASCII
+     * characters (if any) that those bytes represent printed per each line
+     * of output.
+     *
+     * @param data  the byte array to be dumped
+     * @param out  the Appendable to which the data is to be written
+     *
+     * @throws IOException is thrown if anything goes wrong writing
+     *         the data to stream
+     * @throws IllegalArgumentException if the output stream is null
+     */
+
+    public static void dump(final byte[] data, final Appendable out)
+            throws IOException, ArrayIndexOutOfBoundsException,
+            IllegalArgumentException {
+        dump(data, 0, out, 0, data.length);
+    }
+
+    /**
+     * Dump an array of bytes to an Appendable. The output is formatted
+     * for human inspection, with a hexadecimal offset followed by the
+     * hexadecimal values of the next 16 bytes of data and the printable ASCII
+     * characters (if any) that those bytes represent printed per each line
+     * of output.
+     * <p>
+     * The offset argument specifies the start offset of the data array
+     * within a larger entity like a file or an incoming stream. For example,
+     * if the data array contains the third kibibyte of a file, then the
+     * offset argument should be set to 2048. The offset value printed
+     * at the beginning of each line indicates where in that larger entity
+     * the first byte on that line is located.
+     *
+     * @param data  the byte array to be dumped
+     * @param offset  offset of the byte array within a larger entity
+     * @param out  the Appendable to which the data is to be written
+     * @param index initial index into the byte array
+     * @param length number of bytes to read from array
+     *
+     * @throws IOException is thrown if anything goes wrong writing
+     *         the data to stream
+     * @throws ArrayIndexOutOfBoundsException if the index is
+     *         outside the data array's bounds
+     * @throws IllegalArgumentException if the output stream is null
+     */
+
+    public static void dump(final byte[] data, final long offset,
+                            final Appendable out, final int index,
+                            final int length)
+            throws IOException, ArrayIndexOutOfBoundsException,
+            IllegalArgumentException {
+
+        if (index < 0 || index >= data.length) {
+            throw new ArrayIndexOutOfBoundsException(
+                    "illegal index: " + index + " into array of length "
+                    + data.length);
+        }
+        if (out == null) {
+            throw new IllegalArgumentException("cannot write to null out");
+        }
+        long display_offset = offset + index;
+        final StringBuilder buffer = new StringBuilder(74);
+
+        final int endIndex = (index + length) > data.length ? data.length : (index + length);
+
+        for (int j = index; j < endIndex; j += 16) {
+            int chars_read = endIndex - j;
+
+            if (chars_read > 16) {
+                chars_read = 16;
+            }
+            dump(buffer, display_offset).append(' ');
+            for (int k = 0; k < 16; k++) {
+                if (k < chars_read) {
+                    dump(buffer, data[k + j]);
+                } else {
+                    buffer.append("  ");
+                }
+                buffer.append(' ');
+            }
+            for (int k = 0; k < chars_read; k++) {
+                if (data[k + j] >= ' ' && data[k + j] < 127) {
+                    buffer.append((char) data[k + j]);
+                } else {
+                    buffer.append('.');
+                }
+            }
+            buffer.append(EOL);
+            out.append(buffer);
+            buffer.setLength(0);
+            display_offset += chars_read;
+        }
     }
 
     /**
@@ -72,46 +169,14 @@ public class HexDump {
             throws IOException, ArrayIndexOutOfBoundsException,
             IllegalArgumentException {
 
-        if (index < 0 || index >= data.length) {
-            throw new ArrayIndexOutOfBoundsException(
-                    "illegal index: " + index + " into array of length "
-                    + data.length);
-        }
         if (stream == null) {
             throw new IllegalArgumentException("cannot write to nullstream");
         }
-        long display_offset = offset + index;
-        final StringBuilder buffer = new StringBuilder(74);
 
-        for (int j = index; j < data.length; j += 16) {
-            int chars_read = data.length - j;
-
-            if (chars_read > 16) {
-                chars_read = 16;
-            }
-            dump(buffer, display_offset).append(' ');
-            for (int k = 0; k < 16; k++) {
-                if (k < chars_read) {
-                    dump(buffer, data[k + j]);
-                } else {
-                    buffer.append("  ");
-                }
-                buffer.append(' ');
-            }
-            for (int k = 0; k < chars_read; k++) {
-                if (data[k + j] >= ' ' && data[k + j] < 127) {
-                    buffer.append((char) data[k + j]);
-                } else {
-                    buffer.append('.');
-                }
-            }
-            buffer.append(EOL);
-            // make explicit the dependency on the default encoding
-            stream.write(buffer.toString().getBytes(Charset.defaultCharset()));
-            stream.flush();
-            buffer.setLength(0);
-            display_offset += chars_read;
-        }
+        // make explicit the dependency on the default encoding
+        OutputStreamWriter out = new OutputStreamWriter(stream, Charset.defaultCharset());
+        dump(data, offset, out, index, data.length - index);
+        out.flush();
     }
 
     /**
